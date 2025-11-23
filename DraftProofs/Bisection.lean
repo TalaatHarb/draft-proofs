@@ -205,94 +205,91 @@ lemma bisectionStep_subset (f : ℝ → ℝ) (I : Interval) :
       intro x hx
       exact ⟨le_trans (interval_left_le_midpoint I) hx.1, hx.2⟩
 
-/-- If k ≤ m then the m-th interval is contained in the k-th interval. -/
+/-- One-step monotonicity: the (n+1)-th interval is contained in the n-th interval,
+    for any starting interval `J`. This is proved by induction on `n`, generalized
+    over the starting interval. -/
+lemma bisectionInterval_one_step_subset (f : ℝ → ℝ) :
+  ∀ n (J : Interval), (IccOfInterval (bisectionInterval f (n + 1) J)) ⊆ (IccOfInterval (bisectionInterval f n J)) := by
+  intro n J
+  induction n generalizing J with
+  | zero =>
+    -- bisectionInterval f 1 J = bisectionStep f J and bisectionInterval f 0 J = J
+    simp [bisectionInterval]
+    exact bisectionStep_subset f J
+  | succ n ih =>
+    -- bisectionInterval f (n+2) J = bisectionInterval f (n+1) (bisectionStep f J)
+    simp [bisectionInterval]
+    -- apply IH to the starting interval `bisectionStep f J`
+    exact ih (bisectionStep f J)
+
 lemma bisectionInterval_subset_of_le {f : ℝ → ℝ} (I : Interval) :
-  ∀ {k m : ℕ}, k ≤ m -> (IccOfInterval (bisectionInterval f m I)) ⊆ (IccOfInterval (bisectionInterval f k I))
-:= by
+  ∀ {k m : ℕ}, k ≤ m -> (IccOfInterval (bisectionInterval f m I)) ⊆ (IccOfInterval (bisectionInterval f k I)) := by
   intros k m hk
-  -- reduce to m = k + t
-  obtain ⟨t, rfl, ht⟩ := (le_iff_exists_add.1 hk)
+  obtain ⟨t, rfl⟩ := (le_iff_exists_add.1 hk)  -- m = k + t
   induction t with
   | zero => simp
   | succ t ih =>
-    -- m = k + (t+1) so bisectionInterval f (k + t + 1) I = bisectionInterval f (k + t) (bisectionStep f I)
-    have hmk : bisectionInterval f (k + t + 1) I = bisectionInterval f (k + t) (bisectionStep f I) := rfl
-    rw [← add_assoc, hmk]
-    -- apply IH (for t) to show: I_{k+t} (with starting interval bisectionStep f I) ⊆ I_k
-    have step_sub : (IccOfInterval (bisectionStep f I)) ⊆ (IccOfInterval I) := bisectionStep_subset f I
-    -- now apply IH with starting interval `bisectionStep f I`
-    have ih' := ih (by
-      -- show k ≤ k + t
-      apply Nat.le_add_right)
-    -- compose subset relations:
-    induction k with
-    | zero => 
-    simp [zero_add] at *
-    sorry
-    | succ k ikh => sorry
+    -- I_{k + t + 1} ⊆ I_{k + t} by one-step monotonicity, then use IH
+    have step_sub := bisectionInterval_one_step_subset f (k + t) I
+    exact (step_sub.trans (ih (Nat.le_add_right k t)) : _)
 
-
-/-- Distance between two midpoints is bounded by the diameter of the min-th interval. -/
 lemma midpoint_dist_bound (f : ℝ → ℝ) (I : Interval) (m n : ℕ) :
-  |bisectionMidpoint f I m - bisectionMidpoint f I n| ≤ 
+  |bisectionMidpoint f I m - bisectionMidpoint f I n| ≤
     intervalLength (bisectionInterval f (min m n) I) := by
-  -- set k = min m n
+  -- Set k = min m n
   let k := min m n
-  -- show both midpoints lie in the k-th closed interval
-  have sub_m : bisectionMidpoint f I m ∈ IccOfInterval (bisectionInterval f k I) := by
-    -- since k ≤ m, interval m ⊆ interval k, hence midpoint m (which is in interval m) is in interval k
-    have hk : k ≤ m := Nat.min_le_left _ _
-    have : (IccOfInterval (bisectionInterval f m I)) ⊆ (IccOfInterval (bisectionInterval f k I)) := bisectionInterval_subset_of_le I hk
-    -- midpoint lies in its own interval
-    have mid_in_m : bisectionMidpoint f I m ∈ IccOfInterval (bisectionInterval f m I) := by
-      -- midpoint is between the endpoints of its interval
-      let J := bisectionInterval f m I
-      dsimp [bisectionMidpoint, midpoint]
-      -- J.a ≤ midpoint ≤ J.b
-      have h1: J.a ≤ (J.a + J.b) / 2 := by
-        linarith [J.h]
-      have h2: (J.a + J.b) / 2 ≤ J.b := by
-        linarith
-      exact ⟨ h1, h2 ⟩
-    exact this mid_in_m
+  have hk_m : k ≤ m := Nat.min_le_left _ _
+  have hk_n : k ≤ n := Nat.min_le_right _ _
 
-  have sub_n : bisectionMidpoint f I n ∈ IccOfInterval (bisectionInterval f k I) := by
-    sorry
+  -- Midpoint m lies in interval m
+  have mid_m_in_m :
+      bisectionMidpoint f I m ∈ IccOfInterval (bisectionInterval f m I) := by
+    let J := bisectionInterval f m I
+    dsimp [bisectionMidpoint, midpoint]
+    have h1 : J.a ≤ (J.a + J.b)/2 := by linarith [J.h]
+    have h2 : (J.a + J.b)/2 ≤ J.b := by linarith
+    exact ⟨h1, h2⟩
 
-  -- now both midpoints are in I_k = [a_k, b_k], so their distance is ≤ diameter(I_k)
-  rcases (bisectionInterval f k I) with ⟨a_k, b_k, h_k⟩
-  have left_bound : |bisectionMidpoint f I m - (a_k + b_k) / 2| ≤ (b_k - a_k) / 2 := by
-    -- midpoint of any point in [a_k,b_k] to the center is at most half the length
-    have p : bisectionMidpoint f I m ∈ Set.Icc a_k b_k := by
-      rw [IccOfInterval] at sub_m
-      sorry
-    -- compute bound: |x - center| ≤ (b_k - a_k)/2
-    -- equivalent to proving both inequalities by `linarith`
-    have hx1 : bisectionMidpoint f I m ≤ (a_k + b_k) / 2 := by
-      have := p.2
-      sorry
-    have hx2 : (a_k + b_k) / 2 ≤ bisectionMidpoint f I m := by
-      have := p.1
-      sorry
-    -- combine into absolute value bound
-    calc
-      |bisectionMidpoint f I m - (a_k + b_k) / 2|
-        = |(bisectionMidpoint f I m) - (a_k + b_k) / 2| := rfl
-      _ ≤ (b_k - a_k) / 2 := by
-        -- this reduces to simple linear arithmetic
-        have : (a_k + b_k) / 2 - a_k = (b_k - a_k) / 2 := by ring
-        have : b_k - (a_k + b_k) / 2 = (b_k - a_k) / 2 := by ring
-        exact abs_le.2 ⟨by linarith, by linarith⟩
+  -- Midpoint n lies in interval n
+  have mid_n_in_n :
+      bisectionMidpoint f I n ∈ IccOfInterval (bisectionInterval f n I) := by
+    let J := bisectionInterval f n I
+    dsimp [bisectionMidpoint, midpoint]
+    have h1 : J.a ≤ (J.a + J.b)/2 := by linarith [J.h]
+    have h2 : (J.a + J.b)/2 ≤ J.b := by linarith
+    exact ⟨h1, h2⟩
 
-  have right_bound : |bisectionMidpoint f I n - (a_k + b_k) / 2| ≤ (b_k - a_k) / 2 := by
-    -- same proof for n
-    have p := sub_n
-    have hx1 : bisectionMidpoint f I n ≤ (a_k + b_k) / 2 := by sorry
-    have hx2 : (a_k + b_k) / 2 ≤ bisectionMidpoint f I n := by sorry
-    exact abs_le.2 ⟨by linarith, by linarith⟩
+  -- interval m ⊆ interval k because k ≤ m
+  have sub_mk :
+      IccOfInterval (bisectionInterval f m I) ⊆
+      IccOfInterval (bisectionInterval f k I) :=
+    bisectionInterval_subset_of_le I hk_m
 
-  -- triangle inequality: |x - y| ≤ |x - c| + |y - c|
-  sorry
+  -- interval n ⊆ interval k because k ≤ n
+  have sub_nk :
+      IccOfInterval (bisectionInterval f n I) ⊆
+      IccOfInterval (bisectionInterval f k I) :=
+    bisectionInterval_subset_of_le I hk_n
+
+  -- Therefore both midpoints lie in interval k
+  have mid_m_in_k : bisectionMidpoint f I m ∈ IccOfInterval (bisectionInterval f k I) :=
+    sub_mk mid_m_in_m
+  have mid_n_in_k : bisectionMidpoint f I n ∈ IccOfInterval (bisectionInterval f k I) :=
+    sub_nk mid_n_in_n
+
+  -- Unpack interval k
+  -- Let Jk be the k-th interval
+  set Jk := bisectionInterval f k I with hJk
+
+  -- rewrite the midpoint memberships
+  simp [hJk, IccOfInterval] at mid_m_in_k mid_n_in_k
+
+  apply abs_le.2
+  constructor
+  all_goals
+  . simp [Jk]
+    linarith
+
 
 /--
 The bisection midpoint sequence converges to the unique point in the nested
