@@ -32,9 +32,7 @@ structure Interval where
   b : ℝ
   h : a ≤ b
 
-notation "[" a ", " b "]" => Interval.mk a b (by exact ?_)
-
-def midpoint (I : Interval) : ℝ := (I.a + I.b) / 2
+@[simp] def midpoint (I : Interval) : ℝ := (I.a + I.b) / 2
 
 def IccOfInterval (I : Interval) : Set ℝ := Set.Icc I.a I.b
 
@@ -43,14 +41,10 @@ def IccOfInterval (I : Interval) : Set ℝ := Set.Icc I.a I.b
 /-- A single bisection step: given a function `f` and an interval `[a, b]`
 with a sign change, return the next subinterval containing the root. -/
 def bisectionStep (f : ℝ → ℝ) (I : Interval) : Interval :=
-  have hI := I.h
-  let m := (I.a + I.b) / 2
-  have ham : I.a ≤ m := by subst m; linarith
-  have hbm : m ≤ I.b := by subst m; linarith
-  if h : f I.a * f m ≤ 0 then
-    { a := I.a, b := m, h := ham }
+  if h : f I.a * f (midpoint I) ≤ 0 then
+    { a := I.a, b := (midpoint I), h : I.a ≤ (midpoint I) := by simp; linarith[I.h] }
   else
-    { a := m, b := I.b, h := hbm }
+    { a := (midpoint I), b := I.b, h : (midpoint I) ≤ I.b := by simp; linarith[I.h] }
 
 /-- Length of a real interval. -/
 @[simp] def intervalLength (I : Interval) : ℝ := I.b - I.a
@@ -75,36 +69,22 @@ def bisectionMidpoint (f : ℝ → ℝ) (I : Interval) (n : ℕ) : ℝ :=
 section IntervalShrink
 
 lemma interval_left_le_midpoint (I: Interval) : I.a ≤ midpoint I := by
-  simp [midpoint]
-  have h := I.h
-  linarith
+  simp
+  linarith [I.h]
 
-lemma interval_midpoint_le_right (I: Interval) : I.a ≤ midpoint I := by
-  simp [midpoint]
-  have h := I.h
-  linarith
+lemma interval_midpoint_le_right (I: Interval) : midpoint I ≤ I.b := by
+  simp
+  linarith [I.h]
 
 /-- The interval length after one bisection step is half the original. -/
 lemma intervalLength_bisectionStep (f : ℝ → ℝ) (I: Interval):
     intervalLength (bisectionStep f I) = (I.b - I.a) / 2 := by
-  have {a, b, h} := I
   dsimp [bisectionStep, intervalLength]
-  set m : ℝ := (a + b) / 2
-
-  by_cases h : f a * f m ≤ 0
-  · -- Case 1: choose interval (a, m)
-    simp [h, m]  -- reduces goal to proving: m - a = (b - a)/2
-    have : m - a = (b - a) / 2 := by
-      simp [m, sub_eq_add_neg, add_comm]
-      linarith
-    linarith
-
-  · -- Case 2: choose interval (m, b)
-    simp [h, m]
-    have : b - m = (b - a) / 2 := by
-      simp [m, sub_eq_add_neg]
-      linarith
-    linarith
+  by_cases h : f I.a * f (midpoint I) ≤ 0
+  all_goals
+  · split
+    all_goals
+    ring_nf
 
 
 lemma intervalLength_bisectionInterval (f : ℝ → ℝ) (I : Interval) :
@@ -124,7 +104,7 @@ lemma intervalLength_bisectionInterval (f : ℝ → ℝ) (I : Interval) :
     rw [intervalLength_bisectionStep]
     -- We have: ((b - a) / 2) / 2^n = (b - a) / 2^(n+1)
     simp [intervalLength, pow_succ]
-    ring
+    ring_nf
 
 
 
@@ -133,18 +113,18 @@ lemma diam_tendsto_zero (f : ℝ → ℝ) (I : Interval) :
   Tendsto (fun n => intervalLength (bisectionInterval f n I))
           atTop (𝓝 0) := by
   simp_rw [intervalLength_bisectionInterval]
-  have : (fun n => intervalLength I / 2 ^ n) = 
+  have hs : (fun n => intervalLength I / 2 ^ n) = 
          (fun n => intervalLength I * (1 / 2) ^ n) := by
     ext n
     simp
     ring_nf
-  rw [this]
+  rw [hs]
   have hpow : Tendsto (fun n => (1 / 2 : ℝ) ^ n) atTop (𝓝 0) := by
     apply tendsto_pow_atTop_nhds_zero_of_lt_one
     · norm_num
     · norm_num
   convert Tendsto.const_mul (intervalLength I) hpow using 1
-  simp [mul_zero]
+  simp
 
 end IntervalShrink
 
@@ -170,16 +150,13 @@ lemma midpoint_in_interval (f : ℝ → ℝ) (I : Interval) (n : ℕ) :
           rw [bisectionStep]
           by_cases hfp : f I.a * f (midpoint I) ≤ 0
           · -- left interval: new a = old a
-            simp [midpoint] at hfp
             split
             . simp
             . contradiction
           · -- right interval: new a = midpoint ≥ a
-            simp [midpoint] at hfp
             split
-            . linarith
-            . simp
-              linarith [I.h]
+            . contradiction
+            . simp; linarith [I.h]
         apply le_trans hi
         exact ihJ
     . constructor
@@ -195,15 +172,12 @@ lemma midpoint_in_interval (f : ℝ → ℝ) (I : Interval) (n : ℕ) :
           rw [bisectionStep]
           by_cases hfp : f I.a * f (midpoint I) ≤ 0
           · -- left interval: new a = old a
-            simp [midpoint] at hfp
             split
-            . simp
-              linarith [I.h]
+            . simp; linarith [I.h]
             . contradiction
           · -- right interval: new a = midpoint ≥ a
-            simp [midpoint] at hfp
             split
-            . linarith
+            . contradiction
             . simp
         apply le_trans ihJ
         exact hi
@@ -213,45 +187,23 @@ lemma bisectionStep_subset (f : ℝ → ℝ) (I : Interval) :
   IccOfInterval (bisectionStep f I) ⊆ IccOfInterval I := by
   -- expand definitions and do a case split on the `if` in `bisectionStep`
   dsimp [bisectionStep, IccOfInterval, midpoint]
-  set m := (I.a + I.b) / 2
-  by_cases h : f I.a * f m ≤ 0
+  by_cases h : f I.a * f (midpoint I) ≤ 0
   · -- left branch: interval is [I.a, m]
     split
-    . simp
-      -- show {x | I.a ≤ x ∧ x ≤ m} ⊆ {x | I.a ≤ x ∧ x ≤ I.b}
+    . -- show {x | I.a ≤ x ∧ x ≤ m} ⊆ {x | I.a ≤ x ∧ x ≤ I.b}
       intro x hx
-      have hm : m ≤ I.b := by
-        subst m
-        linarith [I.h, hx.2]
-      subst m
-      have hxx:= hx.2
-      exact ⟨hx.1, le_trans hx.2 hm⟩
-    . simp
-      -- show {x | I.a ≤ x ∧ x ≤ m} ⊆ {x | I.a ≤ x ∧ x ≤ I.b}
+      exact ⟨hx.1, le_trans hx.2 (interval_midpoint_le_right I)⟩
+    . -- show {x | I.a ≤ x ∧ x ≤ m} ⊆ {x | I.a ≤ x ∧ x ≤ I.b}
       intro x hx
-      have hm : m ≤ I.b := by
-        subst m
-        linarith [I.h, hx.2]
-      subst m
-      exact ⟨hx.1, le_trans hx.2 hm⟩
+      exact ⟨le_trans (interval_left_le_midpoint I) hx.1, hx.2⟩
   · -- right branch: interval is [m, I.b]
     split
-    . simp
-      -- show {x | I.a ≤ x ∧ x ≤ m} ⊆ {x | I.a ≤ x ∧ x ≤ I.b}
+    . -- show {x | I.a ≤ x ∧ x ≤ m} ⊆ {x | I.a ≤ x ∧ x ≤ I.b}
       intro x hx
-      have hm : m ≤ I.b := by
-        subst m
-        linarith [I.h, hx.2]
-      subst m
-      exact ⟨hx.1, le_trans hx.2 hm⟩
-    . simp
-      -- show {x | I.a ≤ x ∧ x ≤ m} ⊆ {x | I.a ≤ x ∧ x ≤ I.b}
+      exact ⟨hx.1, le_trans hx.2 (interval_midpoint_le_right I)⟩
+    . -- show {x | I.a ≤ x ∧ x ≤ m} ⊆ {x | I.a ≤ x ∧ x ≤ I.b}
       intro x hx
-      have hm : I.a ≤ m := by
-        subst m
-        linarith [I.h, hx.2]
-      subst m
-      exact ⟨le_trans hm hx.1, hx.2⟩
+      exact ⟨le_trans (interval_left_le_midpoint I) hx.1, hx.2⟩
 
 /-- If k ≤ m then the m-th interval is contained in the k-th interval. -/
 lemma bisectionInterval_subset_of_le {f : ℝ → ℝ} (I : Interval) :
