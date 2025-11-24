@@ -474,51 +474,138 @@ lemma bisection_endpoint_a_converges
 
   -- 2. |aₙ - x| ≤ |aₙ - midₙ| + |midₙ - x|   (triangle inequality)
   have htri : dist aₙ x ≤ dist aₙ midₙ + dist midₙ x := by
-    
-    sorry
+    -- dist_triangle: dist a z ≤ dist a b + dist b z
+    exact dist_triangle aₙ midₙ x
 
   -- 3. Bound |aₙ - midₙ| ≤ intervalLength(Iₙ)
   --    (midpoint lies inside interval)
   have h1 : dist aₙ midₙ ≤ intervalLength Iₙ := by
-    sorry
+    dsimp [dist]
+    -- aₙ ≤ midₙ, so aₙ - midₙ ≤ 0, hence |aₙ - midₙ| = midₙ - aₙ
+    have hnonpos : aₙ - midₙ ≤ 0 := by linarith [Iₙ.h]
+    rw [abs_of_nonpos hnonpos]
+    -- midₙ - aₙ = (bₙ - aₙ)/2 ≤ bₙ - aₙ = intervalLength Iₙ
+    have mid_eq : midₙ = (aₙ + Iₙ.b) / 2 := rfl
+    dsimp [midₙ] at mid_eq
+    -- compute midₙ - aₙ = (bₙ - aₙ) / 2
+    simp [aₙ]
+    apply interval_midpoint_le_right
 
   -- 4. For n ≥ N₁ ⇒ intervalLength(Iₙ) < ε/2
   have hI_len : intervalLength Iₙ < ε / 2 := by
-    sorry
+    -- hn : max N₁ N₂ ≤ n and N₁ ≤ max N₁ N₂, so N₁ ≤ n
+    have hn1 : N₁ ≤ n := by
+      exact le_of_max_le_left hn
+    
+    have hnn : dist (intervalLength (bisectionInterval f n I₀)) 0 < ε / 2 := by
+      apply hN₁
+      assumption
+    
+    rw [dist_zero_right] at hnn
+
+    have hd: intervalLength Iₙ = intervalLength (bisectionInterval f n I₀):= by
+      exact rfl
+    
+    rw [hd]
+    exact lt_of_abs_lt hnn
 
   -- 5. For n ≥ N₂ ⇒ |midₙ - x| < ε/2
   have hmid : dist midₙ x < ε / 2 := by
     apply hN₂ n
-    exact le_trans (le_max_right _ _) hn
+    exact le_trans (le_max_right N₁ N₂) hn
 
   -- 6. Final estimate:
   --    dist(aₙ, x) ≤ dist(aₙ, midₙ) + dist(midₙ, x) < ε/2 + ε/2 = ε
-  have hsum :
-      dist aₙ midₙ + dist midₙ x < ε := by
+  have hsum : dist aₙ midₙ + dist midₙ x < ε := by
+    have : dist aₙ midₙ ≤ intervalLength Iₙ := h1
+    have : dist aₙ midₙ < ε / 2 := lt_of_le_of_lt this hI_len
     linarith
 
   exact lt_of_le_of_lt htri hsum
 
 
+
 lemma bisection_endpoint_b_converges (f : ℝ → ℝ) (I₀ : Interval) (x : ℝ)
   (hx_lim : Tendsto (fun n => bisectionMidpoint f I₀ n) atTop (𝓝 x)) :
   Tendsto (fun n => (bisectionInterval f n I₀).b) atTop (𝓝 x) := by
+  -- Use metric characterization of convergence
   rw [Metric.tendsto_atTop]
   intro ε hε
+
+  -- Interval length tends to 0 ⇒ find N₁ such that diam(Iₙ) < ε/2
   have hdiam := diam_tendsto_zero f I₀
   rw [Metric.tendsto_atTop] at hdiam
   obtain ⟨N₁, hN₁⟩ := hdiam (ε / 2) (by linarith)
+
+  -- Midpoints converge ⇒ find N₂ such that |midₙ - x| < ε/2
   rw [Metric.tendsto_atTop] at hx_lim
   obtain ⟨N₂, hN₂⟩ := hx_lim (ε / 2) (by linarith)
-  use max N₁ N₂
+
+  -- Take N = max N₁ N₂
+  refine ⟨max N₁ N₂, ?_⟩
   intro n hn
+
   set Iₙ := bisectionInterval f n I₀
   set bₙ := Iₙ.b
   set midₙ := bisectionMidpoint f I₀ n
-  have hmid_le_b : midₙ ≤ bₙ := by
-    dsimp [bisectionMidpoint, midpoint]
-    exact interval_midpoint_le_right Iₙ
-  sorry
+
+  -- 1. aₙ ≤ midₙ always
+  have ha_le_mid : midₙ ≤ bₙ := by
+    dsimp [bₙ, midₙ, Iₙ, bisectionMidpoint, midpoint]
+    exact interval_midpoint_le_right _
+
+  -- 2. |aₙ - x| ≤ |aₙ - midₙ| + |midₙ - x|   (triangle inequality)
+  have htri : dist Iₙ.b x ≤ dist bₙ midₙ + dist midₙ x := by
+    -- dist_triangle: dist a z ≤ dist a b + dist b z
+    exact dist_triangle bₙ midₙ x
+
+  -- 3. Bound |aₙ - midₙ| ≤ intervalLength(Iₙ)
+  --    (midpoint lies inside interval)
+  have h1 : dist midₙ bₙ ≤ intervalLength Iₙ := by
+    dsimp [dist]
+    -- aₙ ≤ midₙ, so aₙ - midₙ ≤ 0, hence |aₙ - midₙ| = midₙ - aₙ
+    have hnonpos : midₙ - bₙ ≤ 0 := by linarith [Iₙ.h]
+    rw [abs_of_nonpos hnonpos]
+    -- midₙ - aₙ = (bₙ - aₙ)/2 ≤ bₙ - aₙ = intervalLength Iₙ
+    have mid_eq : midₙ = (Iₙ.a + bₙ ) / 2 := rfl
+    dsimp [midₙ] at mid_eq
+    -- compute midₙ - aₙ = (bₙ - aₙ) / 2
+    simp [bₙ]
+    linarith
+
+  -- 4. For n ≥ N₁ ⇒ intervalLength(Iₙ) < ε/2
+  have hI_len : intervalLength Iₙ < ε / 2 := by
+    -- hn : max N₁ N₂ ≤ n and N₁ ≤ max N₁ N₂, so N₁ ≤ n
+    have hn1 : N₁ ≤ n := by
+      exact le_of_max_le_left hn
+    
+    have hnn : dist (intervalLength (bisectionInterval f n I₀)) 0 < ε / 2 := by
+      apply hN₁
+      assumption
+    
+    rw [dist_zero_right] at hnn
+
+    have hd: intervalLength Iₙ = intervalLength (bisectionInterval f n I₀):= by
+      exact rfl
+    
+    rw [hd]
+    exact lt_of_abs_lt hnn
+
+  -- 5. For n ≥ N₂ ⇒ |midₙ - x| < ε/2
+  have hmid : dist midₙ x < ε / 2 := by
+    apply hN₂ n
+    exact le_trans (le_max_right N₁ N₂) hn
+
+  -- 6. Final estimate:
+  --    dist(aₙ, x) ≤ dist(aₙ, midₙ) + dist(midₙ, x) < ε/2 + ε/2 = ε
+  have hsum : dist midₙ bₙ + dist midₙ x < ε := by
+    have : dist midₙ bₙ ≤ intervalLength Iₙ := h1
+    have : dist midₙ bₙ < ε / 2 := lt_of_le_of_lt this hI_len
+    linarith
+  
+  apply lt_of_le_of_lt htri
+  rw [dist_comm]
+  assumption
 
 lemma bisection_fa_endpoint_converges (f : ℝ → ℝ) (hcont : Continuous f)
   (I₀ : Interval) (x : ℝ)
@@ -582,12 +669,16 @@ end Convergence
 
 /-! ## Quantitative Bounds -/
 
-/-- Helper: nested intervals preserve containment -/
-lemma nested_intervals_preserve_containment (f : ℝ → ℝ) (I : Interval) (n : ℕ) :
-    ∀ x, x ∈ Set.Icc I.a I.b → 
-    have {a:= aₙ, b:= bₙ, h:= hₙ} := bisectionInterval f n I
-    x ∈ Set.Icc aₙ bₙ := by
-  sorry -- Requires proving bisection maintains sign change property
+/-- Nestedness: the bisection intervals form a decreasing sequence of sets.
+    If `k ≤ m`, then the m-th bisection interval is contained in the k-th. -/
+lemma nested_intervals_preserve_containment
+    {f : ℝ → ℝ} (I : Interval) :
+    ∀ {k m : ℕ}, k ≤ m →
+      IccOfInterval (bisectionInterval f m I)
+        ⊆ IccOfInterval (bisectionInterval f k I) :=
+by
+  intro k m hkm
+  exact bisectionInterval_subset_of_le I hkm
 
 /-- After `n` steps, the bisection approximation differs from any root
 in the initial interval by at most `(b₀ - a₀) / 2^(n+1)`. -/
@@ -604,6 +695,7 @@ theorem bisection_error_bound
   
   -- Key fact: x must be in [aₙ, bₙ] (nested intervals preserve the root)
   have x_in_interval : x ∈ Set.Icc aₙ bₙ := by
+    
     sorry
   
   -- Therefore |xₙ - x| ≤ (bₙ - aₙ) / 2
@@ -620,6 +712,8 @@ theorem bisection_error_bound
       linarith
   
   -- Use intervalLength_bisectionInterval: bₙ - aₙ = (b₀ - a₀) / 2^n
+  simp [intervalLength]
+  
   sorry
 
 end Numerical
