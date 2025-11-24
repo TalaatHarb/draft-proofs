@@ -380,7 +380,32 @@ lemma bisectionStep_preserve_sign_change_inductive
             -- Inductive step
             -- Expand definition of (n+1)-th interval on both sides
             simp [bisectionInterval]
-            sorry
+            
+            have hi1 : ∀(I: Interval), (bisectionInterval f n (bisectionStep f I)) = (bisectionInterval f (n + 1) I) := by
+              intro I
+              exact rfl
+            
+            have hi2 : ∀(I: Interval), (bisectionStep f (bisectionStep f I)) = (bisectionInterval f 2 I) := by
+              intro I
+              simp [bisectionInterval]
+            
+            have hi3: ∀(I: Interval) (k: ℕ), (bisectionInterval f n (bisectionInterval f k I)) = (bisectionInterval f (n + k) I) := by
+              intro I k
+              induction k generalizing I with
+              | zero => simp [bisectionInterval]
+              | succ k ihk =>
+              simp [bisectionInterval, ihk]
+            
+            have hi4 : ∀(I: Interval) (k: ℕ), (bisectionStep f (bisectionInterval f k I)) = (bisectionInterval f (k + 1) I) := by
+              intro I k
+              simp [bisectionInterval]
+              induction k generalizing I with
+              | zero => simp [bisectionInterval]
+              | succ k ihk =>
+              have := ihk (bisectionStep f I)
+              simp [bisectionInterval]
+              assumption
+            rw [hi2, hi1, hi3, hi4]
       
       rw [hn] at h
       assumption
@@ -411,11 +436,11 @@ lemma bisection_cauchy (f : ℝ → ℝ) (I₀ : Interval) :
   rw [hmin] at hdist
   have hd := (hN N (le_rfl))
   -- Rewrite intervalLength(min) using hmin
-  
-  
-  sorry
-
-
+  have hdm: dist (bisectionMidpoint f I₀ m) (bisectionMidpoint f I₀ N) = |bisectionMidpoint f I₀ m - bisectionMidpoint f I₀ N| := by rfl
+  rw [hdm]
+  apply lt_of_le_of_lt hdist
+  rw [dist_zero_right] at hd
+  exact lt_of_abs_lt hd
 
 lemma bisection_endpoint_a_converges
     (f : ℝ → ℝ) (I₀ : Interval) (x : ℝ)
@@ -449,6 +474,7 @@ lemma bisection_endpoint_a_converges
 
   -- 2. |aₙ - x| ≤ |aₙ - midₙ| + |midₙ - x|   (triangle inequality)
   have htri : dist aₙ x ≤ dist aₙ midₙ + dist midₙ x := by
+    
     sorry
 
   -- 3. Bound |aₙ - midₙ| ≤ intervalLength(Iₙ)
