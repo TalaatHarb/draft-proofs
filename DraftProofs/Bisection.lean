@@ -290,6 +290,237 @@ lemma midpoint_dist_bound (f : ℝ → ℝ) (I : Interval) (m n : ℕ) :
   . simp [Jk]
     linarith
 
+/-- The bisection step preserves the sign-change property:
+    if f a * f b ≤ 0 then the new endpoints also have product ≤ 0. -/
+lemma bisectionStep_preserve_sign_change {f : ℝ → ℝ} (I : Interval)
+  (h : f I.a * f I.b ≤ 0) :
+  f (bisectionStep f I).a * f (bisectionStep f I).b ≤ 0 := by
+  dsimp [bisectionStep, midpoint]
+  by_cases hmid : f I.a * f ((I.a + I.b) / 2) ≤ 0
+  · -- left branch: (a, midpoint)
+    simp [hmid]
+  · -- right branch: (midpoint, b)
+    simp [hmid]
+    -- in this branch we know ¬ (f a * f m ≤ 0), i.e., f a * f m > 0,
+    -- so f a and f m have the same sign. Since f a * f b ≤ 0,
+    -- f m * f b ≤ 0 follows.
+    have hab := h
+    -- rewrite hmid as a strict > 0 inequality
+    have hpos : 0 < f I.a * f ((I.a + I.b) / 2) := by
+      simp at hmid
+      exact hmid
+    -- from positivity of (f a * f m) we get sign(f a) = sign(f m) (or both zero is excluded)
+    -- but we avoid sign reasoning: multiply `hpos` and `hab` gives (f a * f m) * (f a * f b) ≤ 0,
+    -- we can cancel `f a` if nonzero, but simpler: use cases on f I.a = 0
+    by_cases fa0 : f I.a = 0
+    · -- if f a = 0 then f m * f b = 0 ≤ 0
+      rw [fa0, zero_mul] at hpos
+      norm_num at hpos
+    ·
+      -- f a ≠ 0, divide inequalities by f a (preserving direction when positive/negative)
+      -- Transform hpos : 0 < f a * f m  → (f m) * sign(f a) > 0; but we can reason:
+      -- from hpos and fa0 we get 0 < f m * (f a) so sign(f m) = sign(f a).
+      -- Since f a * f b ≤ 0, we have f m * f b ≤ 0 as required.
+      have : f I.a ≠ 0 := fa0
+      -- multiply hab (≤0) by the sign of f a to transfer sign: we use `mul_le_mul_left'`
+      -- A direct and robust approach: consider (f I.a) * (f I.b) ≤ 0 and (f I.a) * (f ((I.a + I.b)/2)) > 0.
+      -- If f I.a > 0 then f ((I.a + I.b)/2) > 0 and from hab we get f ((I.a + I.b)/2) * f I.b ≤ 0.
+      cases lt_or_gt_of_ne this with
+      -- f a > 0
+      | inr =>
+        have hfb : f I.b ≤ 0 := by
+          apply nonpos_of_mul_nonpos_right h
+          assumption
+        have hfab : 0 ≤ f ((I.a + I.b) / 2) := by
+          rw [mul_comm] at hpos
+          have hp := (pos_of_mul_pos_left hpos)
+          apply le_of_lt
+          apply hp
+          linarith
+        exact mul_nonpos_of_nonneg_of_nonpos hfab hfb
+      -- f a < 0
+      | inl =>
+        have hfb : 0 ≤ f I.b := by
+          apply nonneg_of_mul_nonpos_right h
+          assumption
+        have hfab : f ((I.a + I.b) / 2) ≤ 0 := by
+          have hp := (neg_of_mul_pos_right hpos)
+          apply le_of_lt
+          apply hp
+          linarith
+        exact mul_nonpos_of_nonpos_of_nonneg hfab hfb
+
+lemma bisectionStep_preserve_sign_change_inductive
+    (f : ℝ → ℝ) (I₀ : Interval)
+    (hroot : f I₀.a * f I₀.b ≤ 0) :
+    ∀ n,
+      f (bisectionInterval f n I₀).a *
+      f (bisectionInterval f n I₀).b ≤ 0 := by
+  intro n
+  induction n with
+  | zero =>
+      simpa [bisectionInterval] using hroot
+
+  | succ n ih =>
+      -- Expand definition of bisectionInterval (n+1)
+      -- (bisectionInterval f (n+1) I₀ = bisectionStep f (bisectionInterval f n I₀))
+      simp [bisectionInterval]
+
+      -- Now apply the one-step preservation lemma
+      have h:= bisectionStep_preserve_sign_change (bisectionInterval f n I₀) ih
+      have hn : bisectionStep f (bisectionInterval f n I₀) = bisectionInterval f n (bisectionStep f I₀) := by
+        induction n with
+        | zero =>
+            -- Base case: n = 0
+            -- bisectionInterval f 0 I₀ = I₀
+            -- bisectionInterval f 0 (bisectionStep f I₀) = bisectionStep f I₀
+            simp [bisectionInterval]
+      
+        | succ n ih =>
+            -- Inductive step
+            -- Expand definition of (n+1)-th interval on both sides
+            simp [bisectionInterval]
+            sorry
+      
+      rw [hn] at h
+      assumption
+
+
+
+lemma bisection_cauchy (f : ℝ → ℝ) (I₀ : Interval) :
+  CauchySeq (fun n => bisectionMidpoint f I₀ n) := by
+  -- Use the metric Cauchy characterization
+  apply Metric.cauchySeq_iff'.mpr
+  intro ε hε
+
+  -- diam(I_n) → 0 ⇒ ∃ N, ∀ n ≥ N, diam(I_n) < ε
+  have ht := diam_tendsto_zero f I₀
+  rw [Metric.tendsto_atTop] at ht
+  obtain ⟨N, hN⟩ := ht ε hε
+
+  refine ⟨N, ?_⟩
+  intro m hm
+
+  -- midpoint distance bound using the interval of index min m N = N
+  have hdist :=
+    midpoint_dist_bound f I₀ m N
+
+  have hmin : min m N = N := by
+    exact min_eq_right hm
+
+  rw [hmin] at hdist
+  have hd := (hN N (le_rfl))
+  -- Rewrite intervalLength(min) using hmin
+  
+  
+  sorry
+
+
+
+lemma bisection_endpoint_a_converges
+    (f : ℝ → ℝ) (I₀ : Interval) (x : ℝ)
+    (hx_lim : Tendsto (fun n => bisectionMidpoint f I₀ n) atTop (𝓝 x)) :
+    Tendsto (fun n => (bisectionInterval f n I₀).a) atTop (𝓝 x) := by
+  -- Use metric characterization of convergence
+  rw [Metric.tendsto_atTop]
+  intro ε hε
+
+  -- Interval length tends to 0 ⇒ find N₁ such that diam(Iₙ) < ε/2
+  have hdiam := diam_tendsto_zero f I₀
+  rw [Metric.tendsto_atTop] at hdiam
+  obtain ⟨N₁, hN₁⟩ := hdiam (ε / 2) (by linarith)
+
+  -- Midpoints converge ⇒ find N₂ such that |midₙ - x| < ε/2
+  rw [Metric.tendsto_atTop] at hx_lim
+  obtain ⟨N₂, hN₂⟩ := hx_lim (ε / 2) (by linarith)
+
+  -- Take N = max N₁ N₂
+  refine ⟨max N₁ N₂, ?_⟩
+  intro n hn
+
+  set Iₙ := bisectionInterval f n I₀
+  set aₙ := Iₙ.a
+  set midₙ := bisectionMidpoint f I₀ n
+
+  -- 1. aₙ ≤ midₙ always
+  have ha_le_mid : aₙ ≤ midₙ := by
+    dsimp [aₙ, midₙ, Iₙ, bisectionMidpoint, midpoint]
+    exact interval_left_le_midpoint _
+
+  -- 2. |aₙ - x| ≤ |aₙ - midₙ| + |midₙ - x|   (triangle inequality)
+  have htri : dist aₙ x ≤ dist aₙ midₙ + dist midₙ x := by
+    sorry
+
+  -- 3. Bound |aₙ - midₙ| ≤ intervalLength(Iₙ)
+  --    (midpoint lies inside interval)
+  have h1 : dist aₙ midₙ ≤ intervalLength Iₙ := by
+    sorry
+
+  -- 4. For n ≥ N₁ ⇒ intervalLength(Iₙ) < ε/2
+  have hI_len : intervalLength Iₙ < ε / 2 := by
+    sorry
+
+  -- 5. For n ≥ N₂ ⇒ |midₙ - x| < ε/2
+  have hmid : dist midₙ x < ε / 2 := by
+    apply hN₂ n
+    exact le_trans (le_max_right _ _) hn
+
+  -- 6. Final estimate:
+  --    dist(aₙ, x) ≤ dist(aₙ, midₙ) + dist(midₙ, x) < ε/2 + ε/2 = ε
+  have hsum :
+      dist aₙ midₙ + dist midₙ x < ε := by
+    linarith
+
+  exact lt_of_le_of_lt htri hsum
+
+
+lemma bisection_endpoint_b_converges (f : ℝ → ℝ) (I₀ : Interval) (x : ℝ)
+  (hx_lim : Tendsto (fun n => bisectionMidpoint f I₀ n) atTop (𝓝 x)) :
+  Tendsto (fun n => (bisectionInterval f n I₀).b) atTop (𝓝 x) := by
+  rw [Metric.tendsto_atTop]
+  intro ε hε
+  have hdiam := diam_tendsto_zero f I₀
+  rw [Metric.tendsto_atTop] at hdiam
+  obtain ⟨N₁, hN₁⟩ := hdiam (ε / 2) (by linarith)
+  rw [Metric.tendsto_atTop] at hx_lim
+  obtain ⟨N₂, hN₂⟩ := hx_lim (ε / 2) (by linarith)
+  use max N₁ N₂
+  intro n hn
+  set Iₙ := bisectionInterval f n I₀
+  set bₙ := Iₙ.b
+  set midₙ := bisectionMidpoint f I₀ n
+  have hmid_le_b : midₙ ≤ bₙ := by
+    dsimp [bisectionMidpoint, midpoint]
+    exact interval_midpoint_le_right Iₙ
+  sorry
+
+lemma bisection_fa_endpoint_converges (f : ℝ → ℝ) (hcont : Continuous f)
+  (I₀ : Interval) (x : ℝ)
+  (ha_conv : Tendsto (fun n => (bisectionInterval f n I₀).a) atTop (𝓝 x)) :
+  Tendsto (fun n => f (bisectionInterval f n I₀).a) atTop (𝓝 (f x)) := by
+  exact Continuous.tendsto hcont x |>.comp ha_conv
+
+lemma bisection_fb_endpoint_converges (f : ℝ → ℝ) (hcont : Continuous f)
+  (I₀ : Interval) (x : ℝ)
+  (hb_conv : Tendsto (fun n => (bisectionInterval f n I₀).b) atTop (𝓝 x)) :
+  Tendsto (fun n => f (bisectionInterval f n I₀).b) atTop (𝓝 (f x)) := by
+  exact Continuous.tendsto hcont x |>.comp hb_conv
+
+lemma bisection_product_limit (f : ℝ → ℝ) (I₀ : Interval) (x : ℝ)
+  (fa_conv : Tendsto (fun n => f (bisectionInterval f n I₀).a) atTop (𝓝 (f x)))
+  (fb_conv : Tendsto (fun n => f (bisectionInterval f n I₀).b) atTop (𝓝 (f x))) :
+  Tendsto (fun n => f (bisectionInterval f n I₀).a * f (bisectionInterval f n I₀).b) 
+    atTop (𝓝 (f x * f x)) := by
+  exact Tendsto.mul fa_conv fb_conv
+
+lemma bisection_fx_squared_nonpos (f : ℝ → ℝ) (I₀ : Interval)
+  (sign_pres : ∀ n, f (bisectionInterval f n I₀).a * f (bisectionInterval f n I₀).b ≤ 0)
+  (prod_conv : Tendsto (fun n => f (bisectionInterval f n I₀).a * f (bisectionInterval f n I₀).b) 
+    atTop (𝓝 (f x * f x))) :
+  f x * f x ≤ 0 := by
+  apply le_of_tendsto prod_conv
+  filter_upwards with n
+  exact sign_pres n
 
 /--
 The bisection midpoint sequence converges to the unique point in the nested
@@ -302,35 +533,23 @@ theorem bisection_converges
     ∃ x,
       Tendsto (fun n => bisectionMidpoint f I₀ n) atTop (𝓝 x)
       ∧ f x = 0 := by
-  -- The key idea: nested intervals with shrinking diameter
-  -- By Cantor's nested interval theorem, the intersection is a single point
-  
-  -- First, show the sequence is Cauchy
-  have cauchy : CauchySeq (fun n => bisectionMidpoint f I₀ n) := by
-    have {a:= a₀, b:= b₀, h:= h₀} := I₀
-    apply Metric.cauchySeq_iff'.mpr
-    intro ε hε
-    -- Use diam_tendsto_zero to find N where diam < ε
-    have := diam_tendsto_zero f I₀
-    rw [Metric.tendsto_atTop] at this
-    obtain ⟨N, hN⟩ := this ε hε
-    use N
-    intro m hm
-    -- Show |xₘ - xₙ| ≤ diam of interval, which is < ε
-    sorry
-  
-  -- Since ℝ is complete, Cauchy sequence converges
-  obtain ⟨x, hx⟩ := cauchySeq_tendsto_of_complete cauchy
+  have cauchy := bisection_cauchy f I₀
+  obtain ⟨x, hx_lim⟩ := cauchySeq_tendsto_of_complete cauchy
   use x
   constructor
-  · exact hx
-  · -- Show f x = 0 by continuity
-    -- Each interval contains a sign change
-    -- The limit point must be a root
-    sorry -- Would need to show:
-    -- 1. f preserves sign change at endpoints of each interval
-    -- 2. Endpoints converge to x
-    -- 3. Therefore f(x) must be zero by continuity
+  · exact hx_lim
+  · -- Show f x = 0
+    have sign_pres := bisectionStep_preserve_sign_change_inductive f I₀ hroot
+    have a_conv := bisection_endpoint_a_converges f I₀ x hx_lim
+    have b_conv := bisection_endpoint_b_converges f I₀ x hx_lim
+    have fa_conv := bisection_fa_endpoint_converges f hcont I₀ x a_conv
+    have fb_conv := bisection_fb_endpoint_converges f hcont I₀ x b_conv
+    have prod_conv := bisection_product_limit f I₀ x fa_conv fb_conv
+    have fx_sq_nonpos := bisection_fx_squared_nonpos f I₀ sign_pres prod_conv
+    -- (f x)² ≤ 0, but (f x)² ≥ 0, so (f x)² = 0, hence f x = 0
+    have fx_sq_nonneg : 0 ≤ f x * f x := mul_self_nonneg (f x)
+    have : f x * f x = 0 := le_antisymm fx_sq_nonpos fx_sq_nonneg
+    exact mul_self_eq_zero.mp this
 
 end Convergence
 
