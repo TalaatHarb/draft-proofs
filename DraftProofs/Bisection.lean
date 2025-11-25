@@ -551,56 +551,28 @@ lemma bisection_error_bound
   {f : ℝ → ℝ} {I : Interval}
   (n : ℕ)
   {r : ℝ}
-  (hr : r ∈ IccOfInterval I) :
+  (hr : r ∈ IccOfInterval (bisectionInterval f n I)) :
   |bisectionMidpoint f I n - r| ≤ intervalLength I / 2^(n+1) := by
-  -- r is in every later interval: interval_n ⊆ interval_0
-  have hr_in_n : r ∈ IccOfInterval (bisectionInterval f n I) := by
-    
-    sorry
-
-  -- The midpoint of interval n is also in interval n
-  have hmid_in_n :
-      bisectionMidpoint f I n ∈ IccOfInterval (bisectionInterval f n I) :=
-    by
-      let J := bisectionInterval f n I
-      dsimp only [bisectionMidpoint]
-      have h1 : J.a ≤ (J.a + J.b)/2 := by linarith [J.h]
-      have h2 : (J.a + J.b)/2 ≤ J.b := by linarith [J.h]
-      exact ⟨h1, h2⟩
-
-  -- Now unwrap interval n
-  set J := bisectionInterval f n I with hJ
-
-  -- Expand membership into inequalities
-  simp only [IccOfInterval, hJ, Set.mem_Icc] at hr_in_n hmid_in_n
-
-  -- Both midpoint and r lie in [J.a, J.b], so their distance is ≤ J.b - J.a
-  have hdist : |bisectionMidpoint f I n - r| ≤ J.b - J.a := by
-    rcases hmid_in_n with ⟨hmL, hmR⟩
-    rcases hr_in_n with ⟨hrL, hrR⟩
-    have : J.a ≤ bisectionMidpoint f I n := hmL
-    have : r ≥ J.a := hrL
-    have : bisectionMidpoint f I n ≤ J.b := hmR
-    have : r ≤ J.b := hrR
-    have h1 : bisectionMidpoint f I n - r ≤ J.b - J.a := by linarith
-    have h2 : r - bisectionMidpoint f I n ≤ J.b - J.a := by linarith
-    exact abs_sub_le_of_le_of_le hmL hmR hrL hrR
-
-  -- Insert the interval-length shrinking lemma
-  have hlen := intervalLength_bisectionInterval f I n
-
-  -- Rewrite J's length
-  have : J.b - J.a = intervalLength J := by rfl
-  -- Rewrite J.b - J.a as intervalLength J
-  have hdist' : |bisectionMidpoint f I n - r| ≤ intervalLength J := by
-    simpa only [intervalLength] using hdist
-
-  -- Rewrite intervalLength J using the shrinking lemma
-  have hdist'' :
-      |bisectionMidpoint f I n - r|
-        ≤ intervalLength I / 2^n := by
-    simpa only [intervalLength] using hlen ▸ hdist'
   
-  sorry
+  -- Let Iₙ be the nth interval
+  set Iₙ := bisectionInterval f n I
+  set bₙ := Iₙ.b
+  set aₙ := Iₙ.a
+
+  simp only [IccOfInterval, Set.mem_Icc] at hr
+
+  have hxy :
+      |bisectionMidpoint f I n - r| ≤ intervalLength Iₙ / 2 := by
+    apply abs_le.mpr
+    constructor
+    all_goals (simp only [bisectionMidpoint, intervalLength, tsub_le_iff_right, Iₙ]; linarith)
+
+  have hfinal : |bisectionMidpoint f I n - r| ≤ intervalLength I / 2^(n+1) := by
+    have hle : intervalLength I / 2^(n+1) = intervalLength I / 2^n / 2 := by ring_nf
+    simp only [intervalLength_bisectionInterval f I n, Iₙ] at hxy
+    exact le_of_le_of_eq hxy (id (Eq.symm hle))
+
+  exact hfinal
+
 
 end Numerical
