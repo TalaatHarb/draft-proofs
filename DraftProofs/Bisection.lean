@@ -18,7 +18,6 @@ point for a full formalization.
 import Mathlib.Topology.Basic
 import Mathlib.Data.Real.Basic
 import Mathlib.Analysis.Calculus.MeanValue
-import Mathlib.Analysis.SpecialFunctions.Pow.Real
 
 open scoped Topology
 open Filter
@@ -42,9 +41,9 @@ def IccOfInterval (I : Interval) : Set ℝ := Set.Icc I.a I.b
 with a sign change, return the next subinterval containing the root. -/
 def bisectionStep (f : ℝ → ℝ) (I : Interval) : Interval :=
   if h : f I.a * f (midpoint I) ≤ 0 then
-    { a := I.a, b := (midpoint I), h : I.a ≤ (midpoint I) := by simp; linarith[I.h] }
+    { a := I.a, b := (midpoint I), h : I.a ≤ (midpoint I) := by simp only [midpoint]; linarith[I.h] }
   else
-    { a := (midpoint I), b := I.b, h : (midpoint I) ≤ I.b := by simp; linarith[I.h] }
+    { a := (midpoint I), b := I.b, h : (midpoint I) ≤ I.b := by simp only [midpoint]; linarith[I.h] }
 
 /-- Length of a real interval. -/
 @[simp] def intervalLength (I : Interval) : ℝ := I.b - I.a
@@ -69,42 +68,32 @@ def bisectionMidpoint (f : ℝ → ℝ) (I : Interval) (n : ℕ) : ℝ :=
 section IntervalShrink
 
 lemma interval_left_le_midpoint (I: Interval) : I.a ≤ midpoint I := by
-  simp
+  simp only [midpoint]
   linarith [I.h]
 
 lemma interval_midpoint_le_right (I: Interval) : midpoint I ≤ I.b := by
-  simp
+  simp only [midpoint]
   linarith [I.h]
 
 /-- The interval length after one bisection step is half the original. -/
 lemma intervalLength_bisectionStep (f : ℝ → ℝ) (I: Interval):
     intervalLength (bisectionStep f I) = (I.b - I.a) / 2 := by
-  dsimp [bisectionStep, intervalLength]
+  dsimp only [bisectionStep, midpoint, dite_eq_ite, intervalLength]
   by_cases h : f I.a * f (midpoint I) ≤ 0
-  all_goals
-  · split
-    all_goals
-    ring_nf
-
+  all_goals (split; all_goals (ring_nf))
 
 lemma intervalLength_bisectionInterval (f : ℝ → ℝ) (I : Interval) :
   ∀ n : ℕ, intervalLength (bisectionInterval f n I) = intervalLength I / 2^n
 := by
   intro n
   induction n generalizing I with
-  | zero => simp [bisectionInterval, intervalLength, pow_zero]
+  | zero => simp only [intervalLength, bisectionInterval, pow_zero, div_one]
   | succ n ih =>
-    -- let J be the interval after one bisection step
-    let J := bisectionStep f I
-    -- Apply the inductive hypothesis to J (not I!)
-    have ihJ : intervalLength (bisectionInterval f n J) = intervalLength J / 2^n := by exact ih J
     simp only [bisectionInterval]
-    rw [ihJ]
-    -- Now we need: intervalLength J / 2^n = intervalLength (a, b) / 2^(n+1)
-    rw [intervalLength_bisectionStep]
-    -- We have: ((b - a) / 2) / 2^n = (b - a) / 2^(n+1)
-    simp [intervalLength, pow_succ]
-    ring_nf
+    let J := bisectionStep f I
+    have ihJ : intervalLength (bisectionInterval f n J) = intervalLength J / 2^n := by exact ih J
+    rw [ihJ, intervalLength_bisectionStep, pow_succ, intervalLength]
+    exact Eq.symm (div_mul_eq_div_div_swap (I.b - I.a) (2 ^ n) 2)
 
 
 
@@ -116,15 +105,14 @@ lemma diam_tendsto_zero (f : ℝ → ℝ) (I : Interval) :
   have hs : (fun n => intervalLength I / 2 ^ n) = 
          (fun n => intervalLength I * (1 / 2) ^ n) := by
     ext n
-    simp
-    ring_nf
+    simp only [intervalLength, one_div, inv_pow]
+    exact rfl
   rw [hs]
   have hpow : Tendsto (fun n => (1 / 2 : ℝ) ^ n) atTop (𝓝 0) := by
-    apply tendsto_pow_atTop_nhds_zero_of_lt_one
-    · norm_num
-    · norm_num
+    apply tendsto_pow_atTop_nhds_zero_of_lt_one _ _
+    all_goals (norm_num)
   convert Tendsto.const_mul (intervalLength I) hpow using 1
-  simp
+  rw [mul_zero]
 
 end IntervalShrink
 
@@ -140,31 +128,29 @@ lemma midpoint_in_interval (f : ℝ → ℝ) (I : Interval) (n : ℕ) :
     a₀ ≤ aₙ ∧ aₙ ≤ bₙ ∧ bₙ ≤ b₀ := by
     constructor
     . induction n generalizing I with
-      | zero => simp [bisectionInterval]
+      | zero => simp only [bisectionInterval, le_refl]
       | succ n ih => 
-      simp [bisectionInterval]
+      simp only [bisectionInterval]
       . have ihJ := ih (bisectionStep f I)
         have hi : I.a ≤ (bisectionStep f I).a := by      
-          -- bisection always shrinks toward the middle:
-          -- The new 'a' is either I.a or midpoint(I), both ≥ I.a
           rw [bisectionStep]
           by_cases hfp : f I.a * f (midpoint I) ≤ 0
           · -- left interval: new a = old a
             split
-            . simp
+            . simp only [le_refl]
             . contradiction
           · -- right interval: new a = midpoint ≥ a
             split
             . contradiction
-            . simp; linarith [I.h]
+            . simp only [midpoint]; linarith [I.h]
         apply le_trans hi
         exact ihJ
     . constructor
       . exact (bisectionInterval f n I).h
       . induction n generalizing I with
-      | zero => simp [bisectionInterval]
+      | zero => simp only [bisectionInterval, le_refl]
       | succ n ih => 
-      simp [bisectionInterval]
+      simp only [bisectionInterval]
       . have ihJ := ih (bisectionStep f I)
         have hi :  (bisectionStep f I).b ≤ I.b := by      
           -- bisection always shrinks toward the middle:
@@ -173,63 +159,54 @@ lemma midpoint_in_interval (f : ℝ → ℝ) (I : Interval) (n : ℕ) :
           by_cases hfp : f I.a * f (midpoint I) ≤ 0
           · -- left interval: new a = old a
             split
-            . simp; linarith [I.h]
+            . simp only [midpoint]; linarith [I.h]
             . contradiction
           · -- right interval: new a = midpoint ≥ a
             split
             . contradiction
-            . simp
+            . simp only [le_refl]
         apply le_trans ihJ
         exact hi
 
 /-- The interval produced by one bisection step is contained in the original interval. -/
 lemma bisectionStep_subset (f : ℝ → ℝ) (I : Interval) :
   IccOfInterval (bisectionStep f I) ⊆ IccOfInterval I := by
-  -- expand definitions and do a case split on the `if` in `bisectionStep`
-  dsimp [bisectionStep, IccOfInterval, midpoint]
+  dsimp only [bisectionStep, midpoint, dite_eq_ite, IccOfInterval]
   by_cases h : f I.a * f (midpoint I) ≤ 0
   · -- left branch: interval is [I.a, m]
     split
-    . -- show {x | I.a ≤ x ∧ x ≤ m} ⊆ {x | I.a ≤ x ∧ x ≤ I.b}
-      intro x hx
+    . intro x hx
       exact ⟨hx.1, le_trans hx.2 (interval_midpoint_le_right I)⟩
-    . -- show {x | I.a ≤ x ∧ x ≤ m} ⊆ {x | I.a ≤ x ∧ x ≤ I.b}
-      intro x hx
+    . intro x hx
       exact ⟨le_trans (interval_left_le_midpoint I) hx.1, hx.2⟩
   · -- right branch: interval is [m, I.b]
     split
-    . -- show {x | I.a ≤ x ∧ x ≤ m} ⊆ {x | I.a ≤ x ∧ x ≤ I.b}
-      intro x hx
+    . intro x hx
       exact ⟨hx.1, le_trans hx.2 (interval_midpoint_le_right I)⟩
-    . -- show {x | I.a ≤ x ∧ x ≤ m} ⊆ {x | I.a ≤ x ∧ x ≤ I.b}
-      intro x hx
+    . intro x hx
       exact ⟨le_trans (interval_left_le_midpoint I) hx.1, hx.2⟩
 
 /-- One-step monotonicity: the (n+1)-th interval is contained in the n-th interval,
-    for any starting interval `J`. This is proved by induction on `n`, generalized
+    for any starting interval `I`. This is proved by induction on `n`, generalized
     over the starting interval. -/
 lemma bisectionInterval_one_step_subset (f : ℝ → ℝ) :
-  ∀ n (J : Interval), (IccOfInterval (bisectionInterval f (n + 1) J)) ⊆ (IccOfInterval (bisectionInterval f n J)) := by
-  intro n J
-  induction n generalizing J with
+  ∀ (n: ℕ) (I : Interval), (IccOfInterval (bisectionInterval f (n + 1) I)) ⊆ (IccOfInterval (bisectionInterval f n I)) := by
+  intro n I
+  induction n generalizing I with
   | zero =>
-    -- bisectionInterval f 1 J = bisectionStep f J and bisectionInterval f 0 J = J
-    simp [bisectionInterval]
-    exact bisectionStep_subset f J
+    simp only [bisectionInterval]
+    exact bisectionStep_subset f I
   | succ n ih =>
-    -- bisectionInterval f (n+2) J = bisectionInterval f (n+1) (bisectionStep f J)
-    simp [bisectionInterval]
-    -- apply IH to the starting interval `bisectionStep f J`
-    exact ih (bisectionStep f J)
+    simp only [bisectionInterval]
+    exact ih (bisectionStep f I)
 
 lemma bisectionInterval_subset_of_le {f : ℝ → ℝ} (I : Interval) :
   ∀ {k m : ℕ}, k ≤ m -> (IccOfInterval (bisectionInterval f m I)) ⊆ (IccOfInterval (bisectionInterval f k I)) := by
   intros k m hk
   obtain ⟨t, rfl⟩ := (le_iff_exists_add.1 hk)  -- m = k + t
   induction t with
-  | zero => simp
+  | zero => simp only [add_zero, subset_refl]
   | succ t ih =>
-    -- I_{k + t + 1} ⊆ I_{k + t} by one-step monotonicity, then use IH
     have step_sub := bisectionInterval_one_step_subset f (k + t) I
     exact (step_sub.trans (ih (Nat.le_add_right k t)) : _)
 
@@ -245,7 +222,7 @@ lemma midpoint_dist_bound (f : ℝ → ℝ) (I : Interval) (m n : ℕ) :
   have mid_m_in_m :
       bisectionMidpoint f I m ∈ IccOfInterval (bisectionInterval f m I) := by
     let J := bisectionInterval f m I
-    dsimp [bisectionMidpoint, midpoint]
+    dsimp only [bisectionMidpoint]
     have h1 : J.a ≤ (J.a + J.b)/2 := by linarith [J.h]
     have h2 : (J.a + J.b)/2 ≤ J.b := by linarith
     exact ⟨h1, h2⟩
@@ -254,7 +231,7 @@ lemma midpoint_dist_bound (f : ℝ → ℝ) (I : Interval) (m n : ℕ) :
   have mid_n_in_n :
       bisectionMidpoint f I n ∈ IccOfInterval (bisectionInterval f n I) := by
     let J := bisectionInterval f n I
-    dsimp [bisectionMidpoint, midpoint]
+    dsimp only [bisectionMidpoint]
     have h1 : J.a ≤ (J.a + J.b)/2 := by linarith [J.h]
     have h2 : (J.a + J.b)/2 ≤ J.b := by linarith
     exact ⟨h1, h2⟩
@@ -278,54 +255,28 @@ lemma midpoint_dist_bound (f : ℝ → ℝ) (I : Interval) (m n : ℕ) :
     sub_nk mid_n_in_n
 
   -- Unpack interval k
-  -- Let Jk be the k-th interval
-  set Jk := bisectionInterval f k I with hJk
-
   -- rewrite the midpoint memberships
-  simp [hJk, IccOfInterval] at mid_m_in_k mid_n_in_k
-
-  apply abs_le.2
+  simp only [IccOfInterval, Set.mem_Icc] at mid_m_in_k mid_n_in_k
+  simp only [intervalLength, ge_iff_le]
+  apply abs_le.2 _
   constructor
-  all_goals
-  . simp [Jk]
-    linarith
+  all_goals (linarith)
 
 /-- The bisection step preserves the sign-change property:
     if f a * f b ≤ 0 then the new endpoints also have product ≤ 0. -/
 lemma bisectionStep_preserve_sign_change {f : ℝ → ℝ} (I : Interval)
-  (h : f I.a * f I.b ≤ 0) :
-  f (bisectionStep f I).a * f (bisectionStep f I).b ≤ 0 := by
-  dsimp [bisectionStep, midpoint]
+  (h : f I.a * f I.b ≤ 0) : f (bisectionStep f I).a * f (bisectionStep f I).b ≤ 0 := by
+  dsimp only [bisectionStep, midpoint, dite_eq_ite]
   by_cases hmid : f I.a * f ((I.a + I.b) / 2) ≤ 0
   · -- left branch: (a, midpoint)
-    simp [hmid]
+    simp only [hmid, ↓reduceIte]
   · -- right branch: (midpoint, b)
-    simp [hmid]
-    -- in this branch we know ¬ (f a * f m ≤ 0), i.e., f a * f m > 0,
-    -- so f a and f m have the same sign. Since f a * f b ≤ 0,
-    -- f m * f b ≤ 0 follows.
-    have hab := h
-    -- rewrite hmid as a strict > 0 inequality
-    have hpos : 0 < f I.a * f ((I.a + I.b) / 2) := by
-      simp at hmid
-      exact hmid
-    -- from positivity of (f a * f m) we get sign(f a) = sign(f m) (or both zero is excluded)
-    -- but we avoid sign reasoning: multiply `hpos` and `hab` gives (f a * f m) * (f a * f b) ≤ 0,
-    -- we can cancel `f a` if nonzero, but simpler: use cases on f I.a = 0
+    simp only [hmid]
+    have hpos : 0 < f I.a * f ((I.a + I.b) / 2) := lt_of_not_ge hmid
     by_cases fa0 : f I.a = 0
-    · -- if f a = 0 then f m * f b = 0 ≤ 0
-      rw [fa0, zero_mul] at hpos
+    · rw [fa0, zero_mul] at hpos
       norm_num at hpos
-    ·
-      -- f a ≠ 0, divide inequalities by f a (preserving direction when positive/negative)
-      -- Transform hpos : 0 < f a * f m  → (f m) * sign(f a) > 0; but we can reason:
-      -- from hpos and fa0 we get 0 < f m * (f a) so sign(f m) = sign(f a).
-      -- Since f a * f b ≤ 0, we have f m * f b ≤ 0 as required.
-      have : f I.a ≠ 0 := fa0
-      -- multiply hab (≤0) by the sign of f a to transfer sign: we use `mul_le_mul_left'`
-      -- A direct and robust approach: consider (f I.a) * (f I.b) ≤ 0 and (f I.a) * (f ((I.a + I.b)/2)) > 0.
-      -- If f I.a > 0 then f ((I.a + I.b)/2) > 0 and from hab we get f ((I.a + I.b)/2) * f I.b ≤ 0.
-      cases lt_or_gt_of_ne this with
+    · cases lt_or_gt_of_ne fa0 with
       -- f a > 0
       | inr =>
         have hfb : f I.b ≤ 0 := by
@@ -333,9 +284,8 @@ lemma bisectionStep_preserve_sign_change {f : ℝ → ℝ} (I : Interval)
           assumption
         have hfab : 0 ≤ f ((I.a + I.b) / 2) := by
           rw [mul_comm] at hpos
-          have hp := (pos_of_mul_pos_left hpos)
           apply le_of_lt
-          apply hp
+          apply (pos_of_mul_pos_left hpos)
           linarith
         exact mul_nonpos_of_nonneg_of_nonpos hfab hfb
       -- f a < 0
@@ -344,9 +294,8 @@ lemma bisectionStep_preserve_sign_change {f : ℝ → ℝ} (I : Interval)
           apply nonneg_of_mul_nonpos_right h
           assumption
         have hfab : f ((I.a + I.b) / 2) ≤ 0 := by
-          have hp := (neg_of_mul_pos_right hpos)
           apply le_of_lt
-          apply hp
+          apply (neg_of_mul_pos_right hpos)
           linarith
         exact mul_nonpos_of_nonpos_of_nonneg hfab hfb
 
@@ -358,59 +307,27 @@ lemma bisectionStep_preserve_sign_change_inductive
       f (bisectionInterval f n I₀).b ≤ 0 := by
   intro n
   induction n with
-  | zero =>
-      simpa [bisectionInterval] using hroot
-
+  | zero => simpa only [bisectionInterval] using hroot
   | succ n ih =>
-      -- Expand definition of bisectionInterval (n+1)
-      -- (bisectionInterval f (n+1) I₀ = bisectionStep f (bisectionInterval f n I₀))
-      simp [bisectionInterval]
-
-      -- Now apply the one-step preservation lemma
-      have h:= bisectionStep_preserve_sign_change (bisectionInterval f n I₀) ih
-      have hn : bisectionStep f (bisectionInterval f n I₀) = bisectionInterval f n (bisectionStep f I₀) := by
-        induction n with
-        | zero =>
-            -- Base case: n = 0
-            -- bisectionInterval f 0 I₀ = I₀
-            -- bisectionInterval f 0 (bisectionStep f I₀) = bisectionStep f I₀
-            simp [bisectionInterval]
-      
-        | succ n ih =>
-            -- Inductive step
-            -- Expand definition of (n+1)-th interval on both sides
-            simp [bisectionInterval]
-            
-            have hi1 : ∀(I: Interval), (bisectionInterval f n (bisectionStep f I)) = (bisectionInterval f (n + 1) I) := by
-              intro I
-              exact rfl
-            
-            have hi2 : ∀(I: Interval), (bisectionStep f (bisectionStep f I)) = (bisectionInterval f 2 I) := by
-              intro I
-              simp [bisectionInterval]
-            
-            have hi3: ∀(I: Interval) (k: ℕ), (bisectionInterval f n (bisectionInterval f k I)) = (bisectionInterval f (n + k) I) := by
-              intro I k
-              induction k generalizing I with
-              | zero => simp [bisectionInterval]
-              | succ k ihk =>
-              simp [bisectionInterval, ihk]
-            
-            have hi4 : ∀(I: Interval) (k: ℕ), (bisectionStep f (bisectionInterval f k I)) = (bisectionInterval f (k + 1) I) := by
-              intro I k
-              simp [bisectionInterval]
-              induction k generalizing I with
-              | zero => simp [bisectionInterval]
-              | succ k ihk =>
-              have := ihk (bisectionStep f I)
-              simp [bisectionInterval]
-              assumption
-            rw [hi2, hi1, hi3, hi4]
-      
-      rw [hn] at h
-      assumption
-
-
+    simp only [bisectionInterval]
+    have h:= bisectionStep_preserve_sign_change (bisectionInterval f n I₀) ih
+    have hn : bisectionStep f (bisectionInterval f n I₀) = bisectionInterval f n (bisectionStep f I₀) := by
+      induction n with
+      | zero => simp only [bisectionInterval]
+      | succ n ih =>
+        simp only [bisectionInterval]
+        
+        have hi : ∀(I: Interval) (k: ℕ), (bisectionStep f (bisectionInterval f k I)) = (bisectionInterval f (k + 1) I) := by
+          intro I k
+          simp only [bisectionInterval]
+          induction k generalizing I with
+          | zero => simp only [bisectionInterval]
+          | succ k ihk => exact ihk (bisectionStep f I)
+        
+        exact hi (bisectionStep f I₀) n
+    
+    rw [hn] at h
+    exact h
 
 lemma bisection_cauchy (f : ℝ → ℝ) (I₀ : Interval) :
   CauchySeq (fun n => bisectionMidpoint f I₀ n) := by
@@ -427,19 +344,13 @@ lemma bisection_cauchy (f : ℝ → ℝ) (I₀ : Interval) :
   intro m hm
 
   -- midpoint distance bound using the interval of index min m N = N
-  have hdist :=
-    midpoint_dist_bound f I₀ m N
-
-  have hmin : min m N = N := by
-    exact min_eq_right hm
-
-  rw [hmin] at hdist
+  have hdist := midpoint_dist_bound f I₀ m N
+  rw [min_eq_right hm] at hdist
   have hd := (hN N (le_rfl))
-  -- Rewrite intervalLength(min) using hmin
   have hdm: dist (bisectionMidpoint f I₀ m) (bisectionMidpoint f I₀ N) = |bisectionMidpoint f I₀ m - bisectionMidpoint f I₀ N| := by rfl
+  rw [dist_zero_right] at hd
   rw [hdm]
   apply lt_of_le_of_lt hdist
-  rw [dist_zero_right] at hd
   exact lt_of_abs_lt hd
 
 lemma bisection_endpoint_a_converges
@@ -473,40 +384,22 @@ lemma bisection_endpoint_a_converges
     exact interval_left_le_midpoint _
 
   -- 2. |aₙ - x| ≤ |aₙ - midₙ| + |midₙ - x|   (triangle inequality)
-  have htri : dist aₙ x ≤ dist aₙ midₙ + dist midₙ x := by
-    -- dist_triangle: dist a z ≤ dist a b + dist b z
-    exact dist_triangle aₙ midₙ x
+  have htri : dist aₙ x ≤ dist aₙ midₙ + dist midₙ x := dist_triangle aₙ midₙ x
 
   -- 3. Bound |aₙ - midₙ| ≤ intervalLength(Iₙ)
   --    (midpoint lies inside interval)
-  have h1 : dist aₙ midₙ ≤ intervalLength Iₙ := by
-    dsimp [dist]
+  have hdistm : dist aₙ midₙ ≤ intervalLength Iₙ := by
+    dsimp only [dist, intervalLength]
     -- aₙ ≤ midₙ, so aₙ - midₙ ≤ 0, hence |aₙ - midₙ| = midₙ - aₙ
     have hnonpos : aₙ - midₙ ≤ 0 := by linarith [Iₙ.h]
     rw [abs_of_nonpos hnonpos]
-    -- midₙ - aₙ = (bₙ - aₙ)/2 ≤ bₙ - aₙ = intervalLength Iₙ
-    have mid_eq : midₙ = (aₙ + Iₙ.b) / 2 := rfl
-    dsimp [midₙ] at mid_eq
-    -- compute midₙ - aₙ = (bₙ - aₙ) / 2
-    simp [aₙ]
+    simp only [neg_sub, tsub_le_iff_right, sub_add_cancel, ge_iff_le, aₙ]
     apply interval_midpoint_le_right
 
   -- 4. For n ≥ N₁ ⇒ intervalLength(Iₙ) < ε/2
   have hI_len : intervalLength Iₙ < ε / 2 := by
-    -- hn : max N₁ N₂ ≤ n and N₁ ≤ max N₁ N₂, so N₁ ≤ n
-    have hn1 : N₁ ≤ n := by
-      exact le_of_max_le_left hn
-    
-    have hnn : dist (intervalLength (bisectionInterval f n I₀)) 0 < ε / 2 := by
-      apply hN₁
-      assumption
-    
+    have hnn : dist (intervalLength (bisectionInterval f n I₀)) 0 < ε / 2 := hN₁ n (le_of_max_le_left hn)
     rw [dist_zero_right] at hnn
-
-    have hd: intervalLength Iₙ = intervalLength (bisectionInterval f n I₀):= by
-      exact rfl
-    
-    rw [hd]
     exact lt_of_abs_lt hnn
 
   -- 5. For n ≥ N₂ ⇒ |midₙ - x| < ε/2
@@ -516,14 +409,9 @@ lemma bisection_endpoint_a_converges
 
   -- 6. Final estimate:
   --    dist(aₙ, x) ≤ dist(aₙ, midₙ) + dist(midₙ, x) < ε/2 + ε/2 = ε
-  have hsum : dist aₙ midₙ + dist midₙ x < ε := by
-    have : dist aₙ midₙ ≤ intervalLength Iₙ := h1
-    have : dist aₙ midₙ < ε / 2 := lt_of_le_of_lt this hI_len
-    linarith
+  have hsum : dist aₙ midₙ + dist midₙ x < ε := by linarith
 
   exact lt_of_le_of_lt htri hsum
-
-
 
 lemma bisection_endpoint_b_converges (f : ℝ → ℝ) (I₀ : Interval) (x : ℝ)
   (hx_lim : Tendsto (fun n => bisectionMidpoint f I₀ n) atTop (𝓝 x)) :
@@ -549,46 +437,28 @@ lemma bisection_endpoint_b_converges (f : ℝ → ℝ) (I₀ : Interval) (x : �
   set bₙ := Iₙ.b
   set midₙ := bisectionMidpoint f I₀ n
 
-  -- 1. aₙ ≤ midₙ always
-  have ha_le_mid : midₙ ≤ bₙ := by
+  -- 1. midₙ ≤ bₙ always
+  have hmid_le_b : midₙ ≤ bₙ := by
     dsimp [bₙ, midₙ, Iₙ, bisectionMidpoint, midpoint]
     exact interval_midpoint_le_right _
 
-  -- 2. |aₙ - x| ≤ |aₙ - midₙ| + |midₙ - x|   (triangle inequality)
-  have htri : dist Iₙ.b x ≤ dist bₙ midₙ + dist midₙ x := by
-    -- dist_triangle: dist a z ≤ dist a b + dist b z
-    exact dist_triangle bₙ midₙ x
+  -- 2. |bₙ - x| ≤ |bₙ - midₙ| + |midₙ - x|   (triangle inequality)
+  have htri : dist bₙ x ≤ dist bₙ midₙ + dist midₙ x := dist_triangle bₙ midₙ x
 
-  -- 3. Bound |aₙ - midₙ| ≤ intervalLength(Iₙ)
+  -- 3. Bound |bₙ - midₙ| ≤ intervalLength(Iₙ)
   --    (midpoint lies inside interval)
-  have h1 : dist midₙ bₙ ≤ intervalLength Iₙ := by
-    dsimp [dist]
-    -- aₙ ≤ midₙ, so aₙ - midₙ ≤ 0, hence |aₙ - midₙ| = midₙ - aₙ
-    have hnonpos : midₙ - bₙ ≤ 0 := by linarith [Iₙ.h]
-    rw [abs_of_nonpos hnonpos]
-    -- midₙ - aₙ = (bₙ - aₙ)/2 ≤ bₙ - aₙ = intervalLength Iₙ
-    have mid_eq : midₙ = (Iₙ.a + bₙ ) / 2 := rfl
-    dsimp [midₙ] at mid_eq
-    -- compute midₙ - aₙ = (bₙ - aₙ) / 2
-    simp [bₙ]
-    linarith
+  have hdistm : dist bₙ midₙ ≤ intervalLength Iₙ := by
+    dsimp only [dist, intervalLength]
+    -- midₙ ≤ bₙ , so 0 ≤ bₙ - midₙ, hence |bₙ - midₙ| = bₙ - midₙ
+    have hpos : 0 ≤ bₙ - midₙ  := by linarith
+    rw [abs_of_nonneg hpos]
+    refine tsub_le_tsub_left ?_ bₙ
+    apply interval_left_le_midpoint _
 
   -- 4. For n ≥ N₁ ⇒ intervalLength(Iₙ) < ε/2
   have hI_len : intervalLength Iₙ < ε / 2 := by
-    -- hn : max N₁ N₂ ≤ n and N₁ ≤ max N₁ N₂, so N₁ ≤ n
-    have hn1 : N₁ ≤ n := by
-      exact le_of_max_le_left hn
-    
-    have hnn : dist (intervalLength (bisectionInterval f n I₀)) 0 < ε / 2 := by
-      apply hN₁
-      assumption
-    
+    have hnn : dist (intervalLength (bisectionInterval f n I₀)) 0 < ε / 2 := hN₁ n (le_of_max_le_left hn)
     rw [dist_zero_right] at hnn
-
-    have hd: intervalLength Iₙ = intervalLength (bisectionInterval f n I₀):= by
-      exact rfl
-    
-    rw [hd]
     exact lt_of_abs_lt hnn
 
   -- 5. For n ≥ N₂ ⇒ |midₙ - x| < ε/2
@@ -597,15 +467,10 @@ lemma bisection_endpoint_b_converges (f : ℝ → ℝ) (I₀ : Interval) (x : �
     exact le_trans (le_max_right N₁ N₂) hn
 
   -- 6. Final estimate:
-  --    dist(aₙ, x) ≤ dist(aₙ, midₙ) + dist(midₙ, x) < ε/2 + ε/2 = ε
-  have hsum : dist midₙ bₙ + dist midₙ x < ε := by
-    have : dist midₙ bₙ ≤ intervalLength Iₙ := h1
-    have : dist midₙ bₙ < ε / 2 := lt_of_le_of_lt this hI_len
-    linarith
-  
-  apply lt_of_le_of_lt htri
-  rw [dist_comm]
-  assumption
+  --    dist(bₙ, x) ≤ dist(bₙ, midₙ) + dist(midₙ, x) < ε/2 + ε/2 = ε
+  have hsum : dist bₙ midₙ + dist midₙ x < ε := by linarith
+
+  exact lt_of_le_of_lt htri hsum
 
 lemma bisection_fa_endpoint_converges (f : ℝ → ℝ) (hcont : Continuous f)
   (I₀ : Interval) (x : ℝ)
@@ -682,37 +547,59 @@ by
 
 /-- After `n` steps, the bisection approximation differs from any root
 in the initial interval by at most `(b₀ - a₀) / 2^(n+1)`. -/
-theorem bisection_error_bound
-    (f : ℝ → ℝ) (I : Interval) (n : ℕ) :
-    let xₙ := bisectionMidpoint f I n
-    have {a:= a₀, b:= b₀, h:= h₀} := I
-    ∀ x ∈ Set.Icc a₀ b₀,
-      |xₙ - x| ≤ intervalLength I / (2^(n+1)) := by
-  intro x hx  
-  -- Let (aₙ, bₙ) be the n-th interval
-  have {a:= aₙ, b:= bₙ, h:= hₙ} := bisectionInterval f n I
-  set xₙ := (aₙ + bₙ) / 2
-  
-  -- Key fact: x must be in [aₙ, bₙ] (nested intervals preserve the root)
-  have x_in_interval : x ∈ Set.Icc aₙ bₙ := by
+lemma bisection_error_bound
+  {f : ℝ → ℝ} {I : Interval}
+  (n : ℕ)
+  {r : ℝ}
+  (hr : r ∈ IccOfInterval I) :
+  |bisectionMidpoint f I n - r| ≤ intervalLength I / 2^(n+1) := by
+  -- r is in every later interval: interval_n ⊆ interval_0
+  have hr_in_n : r ∈ IccOfInterval (bisectionInterval f n I) := by
     
     sorry
-  
-  -- Therefore |xₙ - x| ≤ (bₙ - aₙ) / 2
-  have bound_by_half_interval : |xₙ - x| ≤ (bₙ - aₙ) / 2 := by
-    have hx_le_b : x ≤ bₙ := x_in_interval.2
-    have ha_le_x : aₙ ≤ x := x_in_interval.1
-    rw [abs_sub_le_iff]
-    constructor
-    · -- xₙ - x ≤ (bₙ - aₙ) / 2
-      have : xₙ = (aₙ + bₙ) / 2 := rfl
-      linarith
-    · -- -(bₙ - aₙ) / 2 ≤ xₙ - x
-      have : xₙ = (aₙ + bₙ) / 2 := rfl
-      linarith
-  
-  -- Use intervalLength_bisectionInterval: bₙ - aₙ = (b₀ - a₀) / 2^n
-  simp [intervalLength]
+
+  -- The midpoint of interval n is also in interval n
+  have hmid_in_n :
+      bisectionMidpoint f I n ∈ IccOfInterval (bisectionInterval f n I) :=
+    by
+      let J := bisectionInterval f n I
+      dsimp only [bisectionMidpoint]
+      have h1 : J.a ≤ (J.a + J.b)/2 := by linarith [J.h]
+      have h2 : (J.a + J.b)/2 ≤ J.b := by linarith [J.h]
+      exact ⟨h1, h2⟩
+
+  -- Now unwrap interval n
+  set J := bisectionInterval f n I with hJ
+
+  -- Expand membership into inequalities
+  simp only [IccOfInterval, hJ, Set.mem_Icc] at hr_in_n hmid_in_n
+
+  -- Both midpoint and r lie in [J.a, J.b], so their distance is ≤ J.b - J.a
+  have hdist : |bisectionMidpoint f I n - r| ≤ J.b - J.a := by
+    rcases hmid_in_n with ⟨hmL, hmR⟩
+    rcases hr_in_n with ⟨hrL, hrR⟩
+    have : J.a ≤ bisectionMidpoint f I n := hmL
+    have : r ≥ J.a := hrL
+    have : bisectionMidpoint f I n ≤ J.b := hmR
+    have : r ≤ J.b := hrR
+    have h1 : bisectionMidpoint f I n - r ≤ J.b - J.a := by linarith
+    have h2 : r - bisectionMidpoint f I n ≤ J.b - J.a := by linarith
+    exact abs_sub_le_of_le_of_le hmL hmR hrL hrR
+
+  -- Insert the interval-length shrinking lemma
+  have hlen := intervalLength_bisectionInterval f I n
+
+  -- Rewrite J's length
+  have : J.b - J.a = intervalLength J := by rfl
+  -- Rewrite J.b - J.a as intervalLength J
+  have hdist' : |bisectionMidpoint f I n - r| ≤ intervalLength J := by
+    simpa only [intervalLength] using hdist
+
+  -- Rewrite intervalLength J using the shrinking lemma
+  have hdist'' :
+      |bisectionMidpoint f I n - r|
+        ≤ intervalLength I / 2^n := by
+    simpa only [intervalLength] using hlen ▸ hdist'
   
   sorry
 
